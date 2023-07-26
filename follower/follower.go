@@ -80,7 +80,7 @@ func (t *Follower) FileName() string {
 }
 
 func (t *Follower) ModeType() fs.FileMode {
-	info, _ := t.file.Stat()
+	info, _ := os.Lstat(t.filename)
 	return info.Mode().Type()
 }
 
@@ -333,7 +333,7 @@ func (t *Follower) sendLine(l []byte, d int, fileInfo string, offset int64) {
 	t.lines <- Line{
 		FileInfo:        fileInfo,
 		OffsetFromBegin: offset,
-		bytes:           []byte{},
+		bytes:           l,
 		discarded:       d,
 	}
 }

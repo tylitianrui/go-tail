@@ -1,4 +1,4 @@
-module github.com/papertrail/go-tail
+module github.com/tylitianrui/go-tail
 
 go 1.19
 

@@ -1,6 +1,6 @@
 # go-tail
 
-A go package for tailing files. `go get -u github.com/papertrail/go-tail`
+A go package for tailing files. `go get -u github.com/tylitianrui/go-tail`
 
 ## Usage
 
@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/papertrail/go-tail/follower"
+	"github.com/tylitianrui/go-tail/follower"
 )
 
 func main() {

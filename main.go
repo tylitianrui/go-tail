@@ -5,8 +5,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/papertrail/go-tail/follower"
 	flag "github.com/spf13/pflag"
+	"github.com/tylitianrui/go-tail/follower"
 )
 
 var (

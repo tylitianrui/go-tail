@@ -3,8 +3,12 @@ package follower
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"io"
+	"io/fs"
 	"os"
+	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,8 +21,10 @@ const (
 )
 
 type Line struct {
-	bytes     []byte
-	discarded int
+	FileInfo        string
+	OffsetFromBegin int64
+	bytes           []byte
+	discarded       int
 }
 
 func (l *Line) Bytes() []byte {
@@ -69,6 +75,40 @@ func New(filename string, config Config) (*Follower, error) {
 
 	return t, nil
 }
+func (t *Follower) FileName() string {
+	return t.filename
+}
+
+func (t *Follower) ModeType() fs.FileMode {
+	info, _ := t.file.Stat()
+	return info.Mode().Type()
+}
+
+func (t *Follower) IsModeSymlink() bool {
+	return t.ModeType() == os.ModeSymlink
+}
+
+func (t *Follower) SymlinkRelationship() ([]string, error) {
+	if !t.IsModeSymlink() {
+		return nil, errors.New(t.filename + " not a symlink")
+
+	}
+	cmd := exec.Command("ls", "-lah", t.filename)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, err
+	}
+	res := string(out)
+	symlinkInfos := strings.Split(res, "->")
+	if len(symlinkInfos) != 2 {
+		return nil, errors.New(t.filename + " parse symlink fail")
+	}
+	sourceFileName := symlinkInfos[1]
+	sourceFileName = strings.TrimLeft(sourceFileName, " ")
+	relationship := []string{t.filename, sourceFileName}
+
+	return relationship, nil
+}
 
 func (t *Follower) Lines() chan Line {
 	return t.lines
@@ -108,6 +148,7 @@ func (t *Follower) follow() error {
 	t.watcher.Add(t.filename)
 
 	for {
+		var _counter int64
 		for {
 			// discard leading NUL bytes
 			var discarded int
@@ -149,7 +190,17 @@ func (t *Follower) follow() error {
 				break
 			}
 
-			t.sendLine(s, discarded)
+			fileInfo := t.filename
+			if t.IsModeSymlink() {
+				rela, err := t.SymlinkRelationship()
+				if err == nil {
+					fileInfo = rela[0] + "->" + rela[1]
+				}
+
+			}
+			_counter++
+			t.sendLine(s, discarded, fileInfo, _counter+t.config.Offset)
+
 		}
 
 		// we're now at EOF, so wait for changes
@@ -278,8 +329,13 @@ func (t *Follower) close(err error) {
 	close(t.lines)
 }
 
-func (t *Follower) sendLine(l []byte, d int) {
-	t.lines <- Line{l[:len(l)-1], d}
+func (t *Follower) sendLine(l []byte, d int, fileInfo string, offset int64) {
+	t.lines <- Line{
+		FileInfo:        fileInfo,
+		OffsetFromBegin: offset,
+		bytes:           []byte{},
+		discarded:       d,
+	}
 }
 
 func (t *Follower) watchFileEvents(eventChan chan fsnotify.Event, errChan chan error) {

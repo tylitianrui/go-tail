@@ -20,11 +20,19 @@ const (
 	peekSize = 1024
 )
 
+type OffsetRange struct {
+	From int64
+	To   int64
+}
 type Line struct {
-	FileInfo        string
-	OffsetFromBegin int64
-	bytes           []byte
-	discarded       int
+	// 此行在文件的offset 区间内[From,To)
+	offsetRange OffsetRange
+	bytes       []byte
+	discarded   int
+}
+
+func (l *Line) OffsetRange() OffsetRange {
+	return l.offsetRange
 }
 
 func (l *Line) Bytes() []byte {
@@ -148,7 +156,6 @@ func (t *Follower) follow() error {
 	t.watcher.Add(t.filename)
 
 	for {
-		var _counter int64
 		for {
 			// discard leading NUL bytes
 			var discarded int
@@ -189,17 +196,9 @@ func (t *Follower) follow() error {
 				t.reader.Reset(t.file)
 				break
 			}
+			curOffset, _ := t.file.Seek(0, io.SeekCurrent)
 
-			fileInfo := t.filename
-			if t.IsModeSymlink() {
-				rela, err := t.SymlinkRelationship()
-				if err == nil {
-					fileInfo = rela[0] + "->" + rela[1]
-				}
-
-			}
-			_counter++
-			t.sendLine(s, discarded, fileInfo, _counter+t.config.Offset)
+			t.sendLine(s, discarded, curOffset-int64(t.reader.Size()), curOffset)
 
 		}
 
@@ -329,12 +328,14 @@ func (t *Follower) close(err error) {
 	close(t.lines)
 }
 
-func (t *Follower) sendLine(l []byte, d int, fileInfo string, offset int64) {
+func (t *Follower) sendLine(l []byte, d int, prevOffset int64, Offset int64) {
 	t.lines <- Line{
-		FileInfo:        fileInfo,
-		OffsetFromBegin: offset,
-		bytes:           l,
-		discarded:       d,
+		offsetRange: OffsetRange{
+			From: prevOffset,
+			To:   Offset,
+		},
+		bytes:     l,
+		discarded: d,
 	}
 }
 
